@@ -114,12 +114,47 @@ public class Model extends Observable {
         // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
-
+        board.setViewingPerspective(side);
+        int[][] changedTiles = new int[size()][size()];
+        for ( int row = size() - 2; row >= 0; row-- ) {
+            for ( int col = 0; col < size(); col++ ) {
+                Tile tile = board.tile(col, row);
+                if (tile != null) {
+                    int upRow = upRow(tile, changedTiles);
+                    if (upRow != row) {
+                        if (board.move(col, upRow, tile)) {
+                            score += board.tile(col, upRow).value();
+                            changedTiles[col][upRow] = 1;
+                        }
+                        changed = true;
+                    }
+                }
+            }
+        }
+        board.setViewingPerspective(Side.NORTH);
         checkGameOver();
         if (changed) {
             setChanged();
         }
         return changed;
+    }
+
+    /**
+     * help to find which row the current tile can up to
+     * @param tile current tile
+     * @return where the current tile can up to
+     */
+    private int upRow(Tile tile, int[][] changedTiles) {
+        int cur_row = tile.row();
+        while (cur_row + 1 < board.size() && board.tile(tile.col(), cur_row + 1) == null) {
+            cur_row++;
+        }
+        if (cur_row + 1 < board.size()
+                && board.tile(tile.col(), cur_row + 1).value() == tile.value()
+                && changedTiles[tile.col()][cur_row + 1] == 0) {
+            return cur_row + 1;
+        }
+        return cur_row;
     }
 
     /** Checks if the game is over and sets the gameOver variable

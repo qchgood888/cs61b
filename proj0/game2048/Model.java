@@ -114,15 +114,13 @@ public class Model extends Observable {
         // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
-        if (side != Side.NORTH) {
-            board.setViewingPerspective(side);
-        }
+        board.setViewingPerspective(side);
         int[][] changedTiles = new int[size()][size()];
         for ( int row = size() - 2; row >= 0; row-- ) {
             for ( int col = 0; col < size(); col++ ) {
                 Tile tile = board.tile(col, row);
                 if (tile != null) {
-                    int upRow = upRow(tile, changedTiles);
+                    int upRow = upRow(col, row, changedTiles);
                     if (upRow != row) {
                         if (board.move(col, upRow, tile)) {
                             score += board.tile(col, upRow).value();
@@ -133,9 +131,7 @@ public class Model extends Observable {
                 }
             }
         }
-        if (side != Side.NORTH) {
-            board.setViewingPerspective(Side.NORTH);
-        }
+        board.setViewingPerspective(Side.NORTH);
         checkGameOver();
         if (changed) {
             setChanged();
@@ -145,17 +141,16 @@ public class Model extends Observable {
 
     /**
      * help to find which row the current tile can up to
-     * @param tile current tile
      * @return where the current tile can up to
      */
-    private int upRow(Tile tile, int[][] changedTiles) {
-        int cur_row = tile.row();
-        while (cur_row + 1 < board.size() && board.tile(tile.col(), cur_row + 1) == null) {
+    private int upRow(int col, int row, int[][] changedTiles) {
+        int cur_row = row;
+        while (cur_row + 1 < board.size() && board.tile(col, cur_row + 1) == null) {
             cur_row++;
         }
         if (cur_row + 1 < board.size()
-                && board.tile(tile.col(), cur_row + 1).value() == tile.value()
-                && changedTiles[tile.col()][cur_row + 1] == 0) {
+                && board.tile(col, cur_row + 1).value() == board.tile(col, row).value()
+                && changedTiles[col][cur_row + 1] == 0) {
             return cur_row + 1;
         }
         return cur_row;

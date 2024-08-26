@@ -6,9 +6,9 @@ public class MaxArrayDeque<T> extends ArrayDeque<T> {
 
     private Comparator<T> comparator;
 
-    public MaxArrayDeque(Comparator<T> comparator) {
+    public MaxArrayDeque(Comparator<T> c) {
         super();
-        this.comparator = comparator;
+        comparator = c;
     }
 
     public T max() {
@@ -24,13 +24,13 @@ public class MaxArrayDeque<T> extends ArrayDeque<T> {
         return max;
     }
 
-    public T max(Comparator<T> comparator) {
+    public T max(Comparator<T> c) {
         if (isEmpty()) {
             return null;
         }
         T max = get(0);
         for (T x : this) {
-            if (comparator.compare(x, max) > 0) {
+            if (c.compare(x, max) > 0) {
                 max = x;
             }
         }

@@ -1,20 +1,27 @@
 package deque;
 
-import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 
 public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
 
     private class Node {
-        public T value;
-        public Node prev;
-        public Node next;
+        private T value;
+        private Node prev;
+        private Node next;
 
         public Node(T value, Node prev, Node next) {
             this.value = value;
             this.prev = prev;
             this.next = next;
+        }
+
+        public T getRecursive(int index) {
+            if (index == 0) {
+                return value;
+            } else {
+                assert next != null;
+                return next.getRecursive(index - 1);
+            }
         }
     }
 
@@ -84,7 +91,7 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
     @Override
     public T get(int index) {
         if (index < 0 || index >= size) {
-            throw new IndexOutOfBoundsException();
+            return null;
         }
         int i = 0;
         Node current = sentinel.next;
@@ -95,9 +102,36 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
         return current.value;
     }
 
+    public T getRecursive(int index) {
+        if (index < 0 || index >= size) {
+            return null;
+        }
+        return sentinel.next.getRecursive(index);
+    }
+
     @Override
     public Iterator<T> iterator() {
         return new LinkedListDequeIterator();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj instanceof Deque) {
+            Deque<?> other = (Deque<?>) obj;
+            if (other.size() != size) {
+                return false;
+            }
+            for (int i = 0; i < size; i++) {
+                if (!other.get(i).equals(this.get(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     private class LinkedListDequeIterator implements Iterator<T> {
@@ -115,6 +149,9 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
 
         @Override
         public T next() {
+            if (!hasNext()) {
+                return null;
+            }
             T returnItem = get(wizPos);
             wizPos += 1;
             return returnItem;

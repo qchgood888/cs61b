@@ -73,10 +73,10 @@ public class Repository {
      *
      * <pre>
      * .gitlet
-     * ├── HEAD
-     * ├── objects
-     * └── refs
-     *     └── heads
+     * |- HEAD
+     * |- objects
+     * |- refs
+     *     |- heads
      * </pre>
      */
     public static void init() {

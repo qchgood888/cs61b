@@ -244,4 +244,18 @@ public class Repository {
         newCommit.save();
         setBranchHeadCommit(currentBranch.get(), newCommit.getId());
     }
+
+    /**
+     * Remove file.
+     *
+     * @param fileName fileName Name of the file
+     */
+    public void remove(String fileName) {
+        File file = getFileFromCWD(fileName);
+        if (stagingArea.get().remove(file)) {
+            stagingArea.get().save();
+        } else {
+            exit("No reason to remove the file.");
+        }
+    }
 }

@@ -26,7 +26,17 @@ public class Main {
                 String fileName = args[1];
                 new Repository().add(fileName);
                 break;
-            // TODO: FILL THE REST IN
+            case "commit":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String message = args[1];
+                if (message.isEmpty()) {
+                    exit("Please enter a commit message.");
+                }
+                new Repository().commit(message);
+                break;
+            default:
+                exit("No command with that name exists.");
         }
     }
 

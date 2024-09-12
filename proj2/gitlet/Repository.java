@@ -2,6 +2,9 @@ package gitlet;
 
 import java.io.File;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static gitlet.MyUtils.*;
 import static gitlet.Utils.*;
@@ -212,5 +215,33 @@ public class Repository {
         return Commit.fromFile(HEADCommitId);
     }
 
+    /**
+     * Perform a commit with message.
+     *
+     * @param msg Commit message
+     */
+    public void commit(String msg) {
+        commit(msg, null);
+    }
 
+    /**
+     * Perform a commit with message and two parents.
+     * @param msg          Commit message
+     * @param secondParent Second parent Commit SHA1 id
+     */
+    private void commit(String msg, String secondParent) {
+        if (stagingArea.get().isClean()) {
+            exit("No changes added to the commit.");
+        }
+        Map<String, String> newTrackedFilesMap = stagingArea.get().commit();
+        stagingArea.get().save();
+        List<String> parents = new ArrayList<>();
+        parents.add(HEADCommit.get().getId());
+        if (secondParent != null) {
+            parents.add(secondParent);
+        }
+        Commit newCommit = new Commit(msg, parents, newTrackedFilesMap);
+        newCommit.save();
+        setBranchHeadCommit(currentBranch.get(), newCommit.getId());
+    }
 }

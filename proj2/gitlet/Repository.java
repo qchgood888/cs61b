@@ -1,6 +1,7 @@
 package gitlet;
 
 import java.io.File;
+import java.nio.file.Paths;
 
 import static gitlet.MyUtils.*;
 import static gitlet.Utils.*;
@@ -35,12 +36,12 @@ public class Repository {
     /**
      * The current working directory.
      */
-    public static final File CWD = new File(System.getProperty("user.dir"));
+    private static final File CWD = new File(System.getProperty("user.dir"));
 
     /**
      * The .gitlet directory.
      */
-    public static final File GITLET_DIR = join(CWD, ".gitlet");
+    private static final File GITLET_DIR = join(CWD, ".gitlet");
 
     /**
      * The index file.
@@ -55,18 +56,39 @@ public class Repository {
     /**
      * The HEAD file.
      */
-    public static final File HEAD = join(GITLET_DIR, "HEAD");
+    private static final File HEAD = join(GITLET_DIR, "HEAD");
 
     /**
      * The refs directory.
      */
-    public static final File REFS_DIR = join(GITLET_DIR, "refs");
+    private static final File REFS_DIR = join(GITLET_DIR, "refs");
 
     /**
      * The heads directory.
      */
-    public static final File BRANCHES_HEADS_DIR = join(REFS_DIR, "heads");
+    private static final File BRANCHES_HEADS_DIR = join(REFS_DIR, "heads");
 
+    /**
+     * The current branch name.
+     */
+    private final Lazy<String> currentBranch = lazy(() -> {
+        String HEADFileContent = readContentsAsString(HEAD);
+        return HEADFileContent.replace(HEAD_BRANCH_REF_PREFIX, "");
+    });
+
+    /**
+     * The commit that HEAD points to.
+     */
+    private final Lazy<Commit> HEADCommit = lazy(() -> getBranchHeadCommit(currentBranch.get()));
+
+    /**
+     * The staging area instance. Initialized in the constructor.
+     */
+    private final Lazy<StagingArea> stagingArea = lazy(() -> {
+        StagingArea stagingArea = INDEX.exists() ? StagingArea.fromFile() : new StagingArea();
+        stagingArea.setTracked(HEADCommit.get().getTracked());
+        return stagingArea;
+    });
 
     /**
      * Initialize a repository at the current working directory.
@@ -101,6 +123,25 @@ public class Repository {
     }
 
     /**
+     * Create an initial commit.
+     */
+    private static void createInitialCommit() {
+        Commit initialCommit = new Commit();
+        initialCommit.save();
+        setBranchHeadCommit(DEFAULT_BRANCH_NAME, initialCommit.getId());
+    }
+
+    /**
+     * Set branch head.
+     * @param branchName Name of the branch
+     * @param commitId Commit SHA1 id
+     */
+    private static void setBranchHeadCommit(String branchName, String commitId) {
+        File branchHeadFile = getBranchHeadFile(branchName);
+        setBranchHeadCommit(branchHeadFile, commitId);
+    }
+
+    /**
      * Get branch head ref file in refs/heads folder.
      *
      * @param branchName Name of the branch
@@ -120,21 +161,56 @@ public class Repository {
     }
 
     /**
-     * Set branch head.
-     * @param branchName Name of the branch
-     * @param commitId Commit SHA1 id
+     * Exit if the repository at the current working directory is not initialized.
      */
-    private static void setBranchHeadCommit(String branchName, String commitId) {
-        File branchHeadFile = getBranchHeadFile(branchName);
-        setBranchHeadCommit(branchHeadFile, commitId);
+    public static void checkWorkingDir() {
+        if (!(GITLET_DIR.exists() && GITLET_DIR.isDirectory())) {
+            exit("Not in an initialized Gitlet directory.");
+        }
     }
 
     /**
-     * Create an initial commit.
+     * Add file to the staging area.
      */
-    private static void createInitialCommit() {
-        Commit initialCommit = new Commit();
-        initialCommit.save();
-        setBranchHeadCommit(DEFAULT_BRANCH_NAME, initialCommit.getId());
+    public void add(String fileName) {
+        File file = getFileFromCWD(fileName);
+        if (!file.exists()) {
+            exit("File does not exist.");
+        }
+        if (stagingArea.get().add(file)) {
+            stagingArea.get().save();
+        }
     }
+
+    /**
+     * Get a File instance from CWD by the name.
+     * @param fileName Name of the file
+     *
+     * @return File instance
+     */
+    private static File getFileFromCWD(String fileName) {
+        return Paths.get(fileName).isAbsolute() ? new File(fileName) : join(CWD, fileName);
+    }
+
+    /**
+     * Get head commit of the branch.
+     * @param branchName Name of the branch
+     * @return Commit instance
+     */
+    private static Commit getBranchHeadCommit(String branchName) {
+        File branchHeadFile = getBranchHeadFile(branchName);
+        return getBranchHeadCommit(branchHeadFile);
+    }
+
+    /**
+     * Get head commit of the branch.
+     * @param branchHeadFile File instance
+     * @return Commit instance
+     */
+    private static Commit getBranchHeadCommit(File branchHeadFile) {
+        String HEADCommitId = readContentsAsString(branchHeadFile);
+        return Commit.fromFile(HEADCommitId);
+    }
+
+
 }

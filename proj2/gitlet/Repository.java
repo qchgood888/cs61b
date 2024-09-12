@@ -2,9 +2,8 @@ package gitlet;
 
 import java.io.File;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
 
 import static gitlet.MyUtils.*;
 import static gitlet.Utils.*;
@@ -70,6 +69,11 @@ public class Repository {
      * The heads directory.
      */
     private static final File BRANCHES_HEADS_DIR = join(REFS_DIR, "heads");
+
+    /**
+     * Files in the current working directory.
+     */
+    private static final Lazy<File[]> currentFiles = lazy(() -> CWD.listFiles(File::isFile));
 
     /**
      * The current branch name.
@@ -257,5 +261,240 @@ public class Repository {
         } else {
             exit("No reason to remove the file.");
         }
+    }
+
+    /**
+     * print log of the current branch.
+     */
+    public void log() {
+        StringBuilder logBuilder = new StringBuilder();
+        Commit curCommit = HEADCommit.get();
+        while (true) {
+            logBuilder.append(curCommit.getLog()).append("\n");
+            List<String> parentCommitIds = curCommit.getParents();
+            if (parentCommitIds.isEmpty()) {
+                break;
+            }
+            String firstParentCommitId = parentCommitIds.get(0);
+            curCommit = Commit.fromFile(firstParentCommitId);
+        }
+        System.out.println(logBuilder);
+    }
+
+    /**
+     * Print all commits logs ever made.
+     */
+    public static void globalLog() {
+        StringBuilder logBuilder = new StringBuilder();
+        // As the project goes, the runtime should be O(N) where N is the number of commits ever made.
+        // But here I choose to log the commits in the order of created date, which has a runtime of O(NlogN).
+        forEachCommit(commit -> logBuilder.append(commit.getLog()).append("\n"));
+        System.out.println(logBuilder);
+    }
+
+    /**
+     * Iterate all commits in the order of created date.
+     * and execute callback function on each of them.
+     *
+     * @param cb Function that accepts Commit as a single argument
+     */
+    private static void forEachCommitInOrder(Consumer<Commit> cb) {
+        Comparator<Commit> commitComparator = Comparator.comparing(Commit::getDate).reversed();
+        Queue<Commit> commitsPriorityQueue = new PriorityQueue<>(commitComparator);
+        forEachCommit(cb, commitsPriorityQueue);
+    }
+
+    /**
+     * Iterate all commits and execute callback function on each of them.
+     *
+     * @param cb Function that accepts Commit as a single argument
+     */
+    private static void forEachCommit(Consumer<Commit> cb) {
+        Queue<Commit> commitsQueue = new ArrayDeque<>();
+        forEachCommit(cb, commitsQueue);
+    }
+
+    /**
+     * Helper method to iterate all commits.
+     *
+     * @param cb                 Callback function executed on the current commit
+     * @param queueToHoldCommits New Queue instance to hold the commits while iterating
+     */
+    @SuppressWarnings("ConstantConditions")
+    private static void forEachCommit(Consumer<Commit> cb, Queue<Commit> queueToHoldCommits) {
+        Set<String> checkedCommitIds = new HashSet<>();
+
+        File[] branchHeadFiles = BRANCHES_HEADS_DIR.listFiles();
+        Arrays.sort(branchHeadFiles, Comparator.comparing(File::getName));
+
+        for (File branchHeadFile : branchHeadFiles) {
+            String branchHeadCommitId = readContentsAsString(branchHeadFile);
+            if (checkedCommitIds.contains(branchHeadCommitId)) {
+                continue;
+            }
+            checkedCommitIds.add(branchHeadCommitId);
+            Commit branchHeadCommit = Commit.fromFile(branchHeadCommitId);
+            queueToHoldCommits.add(branchHeadCommit);
+        }
+
+        while (true) {
+            Commit nextCommit = queueToHoldCommits.poll();
+            cb.accept(nextCommit);
+            List<String> parentCommitIds = nextCommit.getParents();
+            if (parentCommitIds.isEmpty()) {
+                break;
+            }
+            for (String parentCommitId : parentCommitIds) {
+                if (checkedCommitIds.contains(parentCommitId)) {
+                    continue;
+                }
+                checkedCommitIds.add(parentCommitId);
+                Commit parentCommit = Commit.fromFile(parentCommitId);
+                queueToHoldCommits.add(parentCommit);
+            }
+        }
+    }
+
+    /**
+     * Print all commits that have the exact message.
+     *
+     * @param msg Content of the message
+     */
+    public static void find(String msg) {
+        StringBuilder resultBuilder = new StringBuilder();
+        forEachCommit(commit -> {
+            if (commit.getMessage().equals(msg)) {
+                resultBuilder.append(commit.getId()).append("\n");
+            }
+        });
+        if (resultBuilder.length() == 0) {
+            exit("Found no commit with that message.");
+        }
+        System.out.println(resultBuilder);
+    }
+
+    /**
+     * Print the status
+     */
+    @SuppressWarnings("ConstantConditions")
+    public void status() {
+        StringBuilder statusBuilder = new StringBuilder();
+
+        // branches
+        statusBuilder.append("=== Branches ===").append("\n");
+        statusBuilder.append("*").append(currentBranch.get()).append("\n");
+        String[] branchNames = BRANCHES_HEADS_DIR.list((dir, name) -> !name.equals(currentBranch.get()));
+        Arrays.sort(branchNames);
+        for (String branchName : branchNames) {
+            statusBuilder.append(branchName).append("\n");
+        }
+        statusBuilder.append("\n");
+
+        Map<String, String> addedFilesMap = stagingArea.get().getAdded();
+        Set<String> removedFilePathsSet = stagingArea.get().getRemoved();
+
+        // staged files
+        statusBuilder.append("=== Staged Files ===").append("\n");
+        appendFileNamesInOrder(statusBuilder, addedFilesMap.keySet());
+        statusBuilder.append("\n");
+
+        // removed files
+        statusBuilder.append("=== Removed Files ===").append("\n");
+        appendFileNamesInOrder(statusBuilder, removedFilePathsSet);
+        statusBuilder.append("\n");
+
+        // modifications not staged for commit
+        statusBuilder.append("=== Modifications Not Staged For Commit ===").append("\n");
+        List<String> modifiedNotStageFilePaths = new ArrayList<>();
+        Set<String> deletedNotStageFilePaths = new HashSet<>();
+
+        Map<String, String> currentFilesMap = getCurrentFilesMap();
+        Map<String, String> trackedFilesMap = HEADCommit.get().getTracked();
+
+        trackedFilesMap.putAll(addedFilesMap);
+        for (String filePath : removedFilePathsSet) {
+            trackedFilesMap.remove(filePath);
+        }
+
+        for (Map.Entry<String, String> entry : trackedFilesMap.entrySet()) {
+            String filePath = entry.getKey();
+            String blobId = entry.getValue();
+
+            String currentFileBlobId = currentFilesMap.get(filePath);
+
+            if (currentFileBlobId != null) {
+                if (!currentFileBlobId.equals(blobId)) {
+                    // 1. Tracked in the current commit, changed in the working directory, but not staged; or
+                    // 2. Staged for addition, but with different contents than in the working directory.
+                    modifiedNotStageFilePaths.add(filePath);
+                }
+                currentFilesMap.remove(filePath);
+            } else {
+                // 3. Staged for addition, but deleted in the working directory; or
+                // 4. Not staged for removal, but tracked in the current commit and deleted from the working directory.
+                modifiedNotStageFilePaths.add(filePath);
+                deletedNotStageFilePaths.add(filePath);
+            }
+        }
+
+        modifiedNotStageFilePaths.sort(String::compareTo);
+
+        for (String filePath : modifiedNotStageFilePaths) {
+            String fileName = Paths.get(filePath).getFileName().toString();
+            statusBuilder.append(fileName);
+            if (deletedNotStageFilePaths.contains(filePath)) {
+                statusBuilder.append(" ").append("(deleted)");
+            } else {
+                statusBuilder.append(" ").append("(modified)");
+            }
+            statusBuilder.append("\n");
+        }
+        statusBuilder.append("\n");
+
+        // untracked files
+        statusBuilder.append("=== Untracked Files ===").append("\n");
+        appendFileNamesInOrder(statusBuilder, currentFilesMap.keySet());
+        statusBuilder.append("\n");
+
+        System.out.println(statusBuilder);
+    }
+
+    /**
+     * Append lines of file name in order from files paths Set to StringBuilder.
+     * @param stringBuilder       StringBuilder instance
+     * @param filePathsCollection Collection of file paths
+     */
+    private static void appendFileNamesInOrder(StringBuilder stringBuilder, Collection<String> filePathsCollection) {
+        List<String> filePathsList = new ArrayList<>(filePathsCollection);
+        appendFileNamesInOrder(stringBuilder, filePathsList);
+    }
+
+    /**
+     * Append lines of file name in order from files paths Set to StringBuilder.
+     *
+     * @param stringBuilder StringBuilder instance
+     * @param filePathsList List of file paths
+     */
+    private static void appendFileNamesInOrder(StringBuilder stringBuilder, List<String> filePathsList) {
+        filePathsList.sort(String::compareTo);
+        for (String filePath : filePathsList) {
+            String fileName = Paths.get(filePath).getFileName().toString();
+            stringBuilder.append(fileName).append("\n");
+        }
+    }
+
+    /**
+     * Get a Map of file paths and their SHA1 id from CWD.
+     *
+     * @return Map with file path as key and SHA1 id as value
+     */
+    private static Map<String, String> getCurrentFilesMap() {
+        Map<String, String> filesMap = new HashMap<>();
+        for (File file : currentFiles.get()) {
+            String filePath = file.getPath();
+            String blobId = Blob.generatedId(file);
+            filesMap.put(filePath, blobId);
+        }
+        return filesMap;
     }
 }

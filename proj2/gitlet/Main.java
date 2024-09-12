@@ -29,17 +29,41 @@ public class Main {
             case "commit":
                 Repository.checkWorkingDir();
                 validateNumArgs(args, 2);
-                String message = args[1];
-                if (message.isEmpty()) {
+                String commitMessage = args[1];
+                if (commitMessage.isEmpty()) {
                     exit("Please enter a commit message.");
                 }
-                new Repository().commit(message);
+                new Repository().commit(commitMessage);
                 break;
             case "rm":
                 Repository.checkWorkingDir();
                 validateNumArgs(args, 2);
                 String rmFileName = args[1];
                 new Repository().remove(rmFileName);
+                break;
+            case "log":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 1);
+                new Repository().log();
+                break;
+            case "global-log":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 1);
+                Repository.globalLog();
+                break;
+            case "find":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String message = args[1];
+                if (message.isEmpty()) {
+                    exit("Found no commit with that message.");
+                }
+                Repository.find(message);
+                break;
+            case "status":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 1);
+                new Repository().status();
                 break;
             default:
                 exit("No command with that name exists.");

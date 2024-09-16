@@ -110,6 +110,12 @@ public class Main {
                 String resetCommitId = args[1];
                 new Repository().reset(resetCommitId);
                 break;
+            case "merge":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String mergeBranchName = args[1];
+                new Repository().merge(mergeBranchName);
+                break;
             default:
                 exit("No command with that name exists.");
         }

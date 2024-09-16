@@ -170,4 +170,29 @@ public class Commit implements Serializable {
         logBuilder.append(message).append("\n");
         return logBuilder.toString();
     }
+
+    /**
+     * Restore the tracked file.
+     *
+     * @param filePath Path of the file
+     * @return true if file exists in commit
+     */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    public boolean restoreTracked(String filePath) {
+        String blobId = tracked.get(filePath);
+        if (blobId == null) {
+            return false;
+        }
+        Blob.fromFile(blobId).writeContentToSource();
+        return true;
+    }
+
+    /**
+     * Restore all tracked files, overwriting the existing ones.
+     */
+    public void restoreAllTracked() {
+        for (String blobId : tracked.values()) {
+            Blob.fromFile(blobId).writeContentToSource();
+        }
+    }
 }

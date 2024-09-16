@@ -497,4 +497,181 @@ public class Repository {
         }
         return filesMap;
     }
+
+    /**
+     * Checkout file from HEAD Commit.
+     *
+     * @param fileName fileName of the file
+     */
+    public void checkout(String fileName) {
+        String filePath = getFileFromCWD(fileName).getPath();
+        if (!HEADCommit.get().restoreTracked(filePath)) {
+            exit("File does not exist in that commit.");
+        }
+    }
+
+    /**
+     * Checkout file from specific commit id.
+     *
+     * @param commitId Commit SHA1 id
+     * @param fileName Name of the file
+     */
+    public void checkout(String commitId, String fileName) {
+        commitId = getActualCommitId(commitId);
+        String filePath = getFileFromCWD(fileName).getPath();
+        if (!Commit.fromFile(commitId).restoreTracked(filePath)) {
+            exit("File does not exist in that commit.");
+        }
+    }
+
+    /**
+     * Get the whole commit id. Exit with message if it does not exist.
+     *
+     * @param commitId Abbreviate or Whole commit SHA1 id
+     * @return whole commit SHA1 id
+     */
+    @SuppressWarnings("ConstantConditions")
+    private static String getActualCommitId(String commitId) {
+        if (commitId.length() < UID_LENGTH) {
+            if (commitId.length() < 4) {
+                exit("Commit id should contain at least 4 characters.");
+            }
+            String objectDirName = getObjectDirName(commitId);
+            File objectDir = join(OBJECTS_DIR, objectDirName);
+            if (!objectDir.exists()) {
+                exit("No commit with that id exists.");
+            }
+
+            boolean isFound = false;
+            String objectFileNamePrefix = getObjectFileName(commitId);
+
+            for (File objectFile : objectDir.listFiles()) {
+                String objectFileName = objectFile.getName();
+                if (objectFileName.startsWith(objectFileNamePrefix) && isFileInstanceOf(objectFile, Commit.class)) {
+                    if (isFound) {
+                        exit("More than 1 commit has the same id prefix");
+                    }
+                    commitId = objectDirName + objectFileName;
+                    isFound = true;
+                }
+            }
+            if (!isFound) {
+                exit("No commit with that id exists.");
+            }
+        } else {
+            if (!getObjectFile(commitId).exists()) {
+                exit("No commit with that id exists.");
+            }
+        }
+        return commitId;
+    }
+
+    /**
+     * Checkout to branch.
+     * @param targetBranchName Name of the target branch
+     */
+    public void checkoutBranch(String targetBranchName) {
+        File targetBranchHeadFile = getBranchHeadFile(targetBranchName);
+        if (!targetBranchHeadFile.exists()) {
+            exit("No such branch exists.");
+        }
+        if (targetBranchName.equals(currentBranch.get())) {
+            exit("No need to checkout the current branch.");
+        }
+        Commit targetBranchHeadCommit = getBranchHeadCommit(targetBranchHeadFile);
+        checkUntracked(targetBranchHeadCommit);
+        checkoutCommit(targetBranchHeadCommit);
+        setCurrentBranch(targetBranchName);
+    }
+
+    /**
+     * Exit with message if target would overwrite the untracked files.
+     *
+     * @param targetCommit Commit SHA1 id
+     */
+    private void checkUntracked(Commit targetCommit) {
+        Map<String, String> currentFilesMap = getCurrentFilesMap();
+        Map<String, String> trackedFilesMap = HEADCommit.get().getTracked();
+        Map<String, String> addedFilesMap = stagingArea.get().getAdded();
+        Set<String> removedFilesMap = stagingArea.get().getRemoved();
+
+        List<String> untrackedFilePaths = new ArrayList<>();
+
+        for (String filePath : currentFilesMap.keySet()) {
+            if (trackedFilesMap.containsKey(filePath)) {
+                if (removedFilesMap.contains(filePath)) {
+                    untrackedFilePaths.add(filePath);
+                }
+            } else {
+                if (!addedFilesMap.containsKey(filePath)) {
+                    untrackedFilePaths.add(filePath);
+                }
+            }
+        }
+
+        Map<String, String> targetCommitTrackedFilesMap = targetCommit.getTracked();
+
+        for (String filePath : untrackedFilePaths) {
+            String blobId = currentFilesMap.get(filePath);
+            String targetBlobId = targetCommitTrackedFilesMap.get(filePath);
+            if (!blobId.equals(targetBlobId)) {
+                exit("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+    }
+
+    /**
+     * Checkout to specific commit.
+     *
+     * @param targetCommit Commit instance
+     */
+    private void checkoutCommit(Commit targetCommit) {
+        stagingArea.get().clear();
+        stagingArea.get().save();
+        for (File file: currentFiles.get()) {
+            rm(file);
+        }
+        targetCommit.restoreAllTracked();
+    }
+
+    /**
+     * Create a new branch.
+     * @param newBranchName Name of the new branch
+     */
+    public void branch(String newBranchName) {
+        File newBranchHeadFile = getBranchHeadFile(newBranchName);
+        if (newBranchHeadFile.exists()) {
+            exit("A branch with that name already exists.");
+        }
+        setBranchHeadCommit(newBranchHeadFile, HEADCommit.get().getId());
+    }
+
+    /**
+     * Delete the branch.
+     * @param targetBranchName Name of the new branch
+     */
+    public void rmBranch(String targetBranchName) {
+        File targetBranchHeadFile = getBranchHeadFile(targetBranchName);
+        if (!targetBranchHeadFile.exists()) {
+            exit("A branch with that name not exist.");
+        }
+        if (targetBranchName.equals(currentBranch.get())) {
+            exit("Cannot remove the current branch.");
+        }
+        rm(targetBranchHeadFile);
+    }
+
+    /**
+     * Reset to commit with the id.
+     *
+     * @param commitId Commit SHA1 id
+     */
+    public void reset(String commitId) {
+        commitId = getActualCommitId(commitId);
+        Commit targetCommit = Commit.fromFile(commitId);
+        checkUntracked(targetCommit);
+        checkoutCommit(targetCommit);
+        setBranchHeadCommit(currentBranch.get(), commitId);
+    }
+
 }

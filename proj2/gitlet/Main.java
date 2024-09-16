@@ -65,6 +65,51 @@ public class Main {
                 validateNumArgs(args, 1);
                 new Repository().status();
                 break;
+            case "checkout":
+                Repository.checkWorkingDir();
+                Repository repository = new Repository();
+                switch (args.length) {
+                    case 3:
+                        if (!args[1].equals("--")) {
+                            exit("Incorrect operands.");
+                        }
+                        String fileName = args[2];
+                        repository.checkout(fileName);
+                        break;
+                    case 4:
+                        if (!args[2].equals("--")) {
+                            exit("Incorrect operands.");
+                        }
+                        String commitId = args[1];
+                        String fileName1 = args[3];
+                        repository.checkout(commitId, fileName1);
+                        break;
+                    case 2:
+                        String branch = args[1];
+                        repository.checkoutBranch(branch);
+                        break;
+                    default:
+                        exit("Incorrect operands");
+                }
+                break;
+            case "branch":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String branchName = args[1];
+                new Repository().branch(branchName);
+                break;
+            case "rm-branch":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String rmBranchName = args[1];
+                new Repository().rmBranch(rmBranchName);
+                break;
+            case "reset":
+                Repository.checkWorkingDir();
+                validateNumArgs(args, 2);
+                String resetCommitId = args[1];
+                new Repository().reset(resetCommitId);
+                break;
             default:
                 exit("No command with that name exists.");
         }
